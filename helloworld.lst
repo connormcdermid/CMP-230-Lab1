@@ -41,8 +41,8 @@
     37 00000009 576F726C64210D0A0D-
     37 00000012 0A                 
     38                                  length:  equ  	$-message        ; NASM definition pseudo-instruction
-    39 00000013 476F6F646279652057-     goodbye: db 	'Goodbye World1',0Dh,0Ah,0Dh,0Ah	; goodbye world message and CRLF
-    39 0000001C 6F726C64310D0A0D0A 
+    39 00000013 476F6F646279652057-     goodbye: db 	'Goodbye World!',0Dh,0Ah,0Dh,0Ah	; goodbye world message and CRLF
+    39 0000001C 6F726C64210D0A0D0A 
     40                                  gblen: 	 equ 	$-goodbye	; length of goodbye
     41 00000025 54686174277320416C-     looney:  db 	"That's All, Folks!",0Dh,0Ah,0Dh,0Ah	; looney tunes farewell
     41 0000002E 6C2C20466F6C6B7321-

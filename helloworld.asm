@@ -36,7 +36,7 @@ main:
 section .data
 message: db   	0Dh,0Ah,'Hello, World!',0Dh,0Ah,0Dh,0Ah   ; message and CRLF
 length:  equ  	$-message        ; NASM definition pseudo-instruction
-goodbye: db 	'Goodbye World1',0Dh,0Ah,0Dh,0Ah	; goodbye world message and CRLF
+goodbye: db 	'Goodbye World!',0Dh,0Ah,0Dh,0Ah	; goodbye world message and CRLF
 gblen: 	 equ 	$-goodbye	; length of goodbye
 looney:  db 	"That's All, Folks!",0Dh,0Ah,0Dh,0Ah	; looney tunes farewell
 looneylen: equ 	$-looney		; looney tunes farewell length
