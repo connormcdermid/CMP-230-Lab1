@@ -1,0 +1,361 @@
+     1                                  ;Author: Connor McDermid
+     2                                  ;64-bit NASM program 2
+     3                                  ;Compiled using asmlink program as well as
+     4                                  ;nasm -felf64 helloworld.asm && ld helloworld.o
+     5                                  %include "Macros_CPsub64.inc" ; macro subroutine libs
+     6                              <1> ;--------------------------- MACROS ------------------------------------------
+     7                              <1> ; Change Log:
+     8                              <1> ; 02-06-21 CP Rename ifndef for Exit from CPExit to Exit, update mShowRegister
+     9                              <1> ;
+    10                              <1> ;
+    11                              <1> ;-----------------------------------------------------------------------------
+    12                              <1> %ifndef MACRO_CPSUB64
+    13                              <1> %define MACRO_CPSUB64
+    14                              <1> 
+    15                              <1> %define STDIN  0
+    16                              <1> %define STDOUT 1
+    17                              <1> %define STDERR 2
+    18                              <1> 
+    19                              <1> %define TAB 09h
+    20                              <1> %define NL 0Ah
+    21                              <1> 
+    22                              <1> ; define the timespec structure used in nanosleep
+    23                              <1> struc timespec
+    24 00000000 ????????            <1>      tv_sec: resd 1
+    25 00000004 ????????            <1>      tv_nsec: resd 1
+    26                              <1> endstruc
+    27                              <1> 
+    28                              <1> 
+    29                              <1> ; Synonym for NASM invoke
+    30                              <1> %ifnmacro INVOKE
+    31                              <1> %macro INVOKE 1-*.nolist
+    32                              <1>      %rep %0 - 1
+    33                              <1>      %rotate -1
+    34                              <1>      push qword %1
+    35                              <1>      %endrep
+    36                              <1>      %rotate -1
+    37                              <1>      call %1
+    38                              <1>      add rsp, ( %0 - 1 ) * 8
+    39                              <1> %endmacro
+    40                              <1> %endif
+    41                              <1> 
+    42                              <1> 
+    43                              <1> %ifnmacro mWrite
+    44                              <1> ;------------------------------------------------------
+    45                              <1> %macro mWrite 1.nolist
+    46                              <1> ;
+    47                              <1> ; Writes a string literal to standard output.
+    48                              <1> ; Receives: a string enclosed in single or double 
+    49                              <1> ;   quotes (null terminator not required).
+    50                              <1> ;------------------------------------------------------
+    51                              <1> segment .data
+    52                              <1> 	%%string: db %1, 0
+    53                              <1> segment .text
+    54                              <1> 	push	rdx
+    55                              <1> 	mov	rdx,%%string
+    56                              <1>  	call	WriteString
+    57                              <1>  	pop	rdx
+    58                              <1> %endmacro
+    59                              <1> %endif
+    60                              <1> 
+    61                              <1> 
+    62                              <1> %ifnmacro mWriteSpace
+    63                              <1> ;------------------------------------------------------
+    64                              <1> %macro mWriteSpace 0-1.nolist 1
+    65                              <1> ;
+    66                              <1> ; Writes one or more spaces to standard output.
+    67                              <1> ; Receives: an integer specifying the number of spaces.
+    68                              <1> ;   If count is blank, a single space is written.
+    69                              <1> ;------------------------------------------------------
+    70                              <1> segment .data
+    71                              <1> %%spaces: times %1 db ' '
+    72                              <1> 	db 0
+    73                              <1> segment .text
+    74                              <1> 	push	rdx
+    75                              <1> 	mov	rdx, %%spaces
+    76                              <1> 	call	WriteString
+    77                              <1> 	pop	rdx
+    78                              <1> %endmacro
+    79                              <1> %endif
+    80                              <1> 
+    81                              <1> 
+    82                              <1> %ifnmacro mShowRegister
+    83                              <1> ;---------------------------------------------------
+    84                              <1> %macro mShowRegister 2.nolist
+    85                              <1> ;
+    86                              <1> ; Displays a 64-bit register name and its contents.
+    87                              <1> ; Receives: the register string name, the register.
+    88                              <1> ; Returns:  nothing
+    89                              <1> ;---------------------------------------------------
+    90                              <1> segment .data
+    91                              <1> %%tempStr: db "  ", %1,": ",0
+    92                              <1> 
+    93                              <1> segment .text
+    94                              <1> 	push	rax		; save reg	
+    95                              <1> 	push	rdx 		; save reg
+    96                              <1> 	mov	rdx, %%tempStr	; display the register name
+    97                              <1> 	call	WriteString
+    98                              <1> 	pop	rdx		; restore reg
+    99                              <1> 	mov	rax, %2		; display the reg contents in hex
+   100                              <1> 	call	WriteHex
+   101                              <1> 	pop	rax             ; restore reg
+   102                              <1> %endmacro
+   103                              <1> %endif
+   104                              <1> 
+   105                              <1> 
+   106                              <1> %ifnmacro ShowFlag
+   107                              <1> ;---------------------------------------------------------------------
+   108                              <1> %macro ShowFlag 2.nolist
+   109                              <1> ;
+   110                              <1> ; Helper macro.
+   111                              <1> ; Display a single CPU flag value
+   112                              <1> ; Directly accesses the eflags variable in Along32.asm
+   113                              <1> ; (This macro cannot be placed in Macros.inc)
+   114                              <1> ;---------------------------------------------------------------------
+   115                              <1> segment .data
+   116                              <1> %%flagStr: db "  ",%1, "="
+   117                              <1> %%flagVal: db 0,0
+   118                              <1> 
+   119                              <1> segment .text
+   120                              <1> 	push rax
+   121                              <1> 	push rdx
+   122                              <1> 	mov  rax, qword [eflags]	; retrieve the flags
+   123                              <1> 	mov  byte [%%flagVal],'1'
+   124                              <1> 	shr  rax, %2			; shift into carry flag
+   125                              <1> 	jc   %%L1
+   126                              <1> 	mov  byte [%%flagVal],'0'
+   127                              <1> %%L1:
+   128                              <1> 	mov  rdx, %%flagStr	; display flag name and value
+   129                              <1> 	call WriteString
+   130                              <1> 	pop  rdx
+   131                              <1> 	pop  rax
+   132                              <1> %endmacro
+   133                              <1> %endif
+   134                              <1> 
+   135                              <1> 
+   136                              <1> %ifnmacro ShowCC
+   137                              <1> ;---------------------------------------------------------------------
+   138                              <1> %macro ShowCC 2.nolist
+   139                              <1> ;
+   140                              <1> ; Helper macro.
+   141                              <1> ; Display a single Condition Code Eflag name and value
+   142                              <1> ; Directly accesses the eflags variable.
+   143                              <1> ; 
+   144                              <1> ;---------------------------------------------------------------------
+   145                              <1> segment .data
+   146                              <1> %%flagStr: db "  ",%1," : "    	; flag name plus = sign
+   147                              <1> %%flagVal: db 0,0         	; flag value if 0 or 1, plus NULL
+   148                              <1> 
+   149                              <1> segment .text
+   150                              <1> 	push rax  		; save reg
+   151                              <1> 	push rdx		; save reg
+   152                              <1> 	mov  rax, qword [eflags]	; retrieve the flags
+   153                              <1> 	mov  byte [%%flagVal],'1'	; ON
+   154                              <1> 	shr  rax, %2		; shift into carry flag
+   155                              <1> 	jc   %%L1
+   156                              <1> 	mov  byte [%%flagVal],'0'	; OFF
+   157                              <1> %%L1:
+   158                              <1> 	mov  rdx, %%flagStr	; display flag name and value
+   159                              <1> 	call WriteString
+   160                              <1> 	call Crlf		; line feed
+   161                              <1> 	pop  rdx		; restore reg
+   162                              <1> 	pop  rax		; restore reg
+   163                              <1> %endmacro
+   164                              <1> %endif
+   165                              <1> 
+   166                              <1> 
+   167                              <1> 
+   168                              <1> %ifnmacro CheckInit
+   169                              <1> ;-------------------------------------------------------------
+   170                              <1> %macro CheckInit 0.nolist
+   171                              <1> ;
+   172                              <1> ; Helper macro
+   173                              <1> ; Check to see if the console handles have been initialized
+   174                              <1> ; If not, initialize them now.
+   175                              <1> ;-------------------------------------------------------------
+   176                              <1> 	cmp byte [InitFlag],0
+   177                              <1> 	jne %%exit
+   178                              <1> 	mov byte [InitFlag],1
+   179                              <1> 	call BufferFlush
+   180                              <1> %%exit:
+   181                              <1> %endmacro
+   182                              <1> %endif
+   183                              <1> 
+   184                              <1> 
+   185                              <1> %ifnmacro SaveRegs
+   186                              <1> ;-------------------------------------------------------------
+   187                              <1> %macro SaveRegs 0.nolist
+   188                              <1> ;
+   189                              <1> ; Convenience macro
+   190                              <1> ; Save Registers
+   191                              <1> ; PUSH the 16 general purpose regs to the stack.
+   192                              <1> ;-------------------------------------------------------------
+   193                              <1>        push rax
+   194                              <1>        push rbx 
+   195                              <1>        push rcx
+   196                              <1>        push rdx
+   197                              <1>        push rsi
+   198                              <1>        push rdi
+   199                              <1>        push rbp
+   200                              <1>        push rsp
+   201                              <1>        push r8 	
+   202                              <1>        push r9  
+   203                              <1>        push r10
+   204                              <1>        push r11
+   205                              <1>        push r12
+   206                              <1>        push r13
+   207                              <1>        push r14
+   208                              <1>        push r15
+   209                              <1> %%exit:
+   210                              <1> %endmacro
+   211                              <1> %endif
+   212                              <1> 
+   213                              <1> %ifnmacro RestoreRegs
+   214                              <1> ;-------------------------------------------------------------
+   215                              <1> %macro RestoreRegs 0.nolist
+   216                              <1> ;
+   217                              <1> ; Convenience macro
+   218                              <1> ; Restore Registers
+   219                              <1> ; POP the 16 general purpose regs from the stack.
+   220                              <1> ;-------------------------------------------------------------
+   221                              <1> 	pop r15
+   222                              <1> 	pop r14
+   223                              <1> 	pop r13
+   224                              <1>      	pop r12
+   225                              <1> 	pop r11 
+   226                              <1> 	pop r10
+   227                              <1>      	pop r9 
+   228                              <1>      	pop r8 
+   229                              <1> 	pop rsp
+   230                              <1>       	pop rbp 
+   231                              <1>       	pop rdi
+   232                              <1>       	pop rsi
+   233                              <1>       	pop rdx
+   234                              <1>       	pop rcx 
+   235                              <1>       	pop rbx
+   236                              <1>       	pop rax
+   237                              <1> %%exit:
+   238                              <1> %endmacro
+   239                              <1> %endif
+   240                              <1> 
+   241                              <1> ; Termination Macro
+   242                              <1> ;-------------------------------------------------------------
+   243                              <1> ;
+   244                              <1> ; Convenience macro
+   245                              <1> ; Exit to operating system under Linux.
+   246                              <1> ;-------------------------------------------------------------
+   247                              <1> %ifnmacro Exit
+   248                              <1> %macro Exit 0.nolist  
+   249                              <1>      mov rax, 60
+   250                              <1>      xor rdi, rdi
+   251                              <1>      syscall
+   252                              <1> %%exit:
+   253                              <1> %endmacro
+   254                              <1> %endif
+   255                              <1> 
+   256                              <1> ; Termination Macro
+   257                              <1> %ifnmacro CPexit
+   258                              <1> ;-------------------------------------------------------------
+   259                              <1> ;
+   260                              <1> ; Convenience macro
+   261                              <1> ; Exit to operating system under Linux.
+   262                              <1> ;-------------------------------------------------------------
+   263                              <1> %macro CPexit 0-1.nolist  
+   264                              <1>      mov rax, 60
+   265                              <1>      xor rdi, rdi
+   266                              <1>      syscall
+   267                              <1> %%exit:
+   268                              <1> %endmacro
+   269                              <1> %endif
+   270                              <1> 
+   271                              <1> %endif  ;End of Macro Definitions
+     6                                  %include "CPsub64.inc" 
+     7                              <1> ; Last update: 2019/08/20
+     8                              <1> 
+     9                              <1> %ifndef CPSUB64
+    10                              <1> %define CPSUB64
+    11                              <1> 
+    12                              <1> ; ------------------------------------------
+    13                              <1> ; function prototypes
+    14                              <1> ; ------------------------------------------
+    15                              <1> extern Clearscr
+    16                              <1> extern CloseFile
+    17                              <1> extern Crlf
+    18                              <1> extern ClearBuffer
+    19                              <1> extern Delay
+    20                              <1> extern DumpMem
+    21                              <1> extern DumpCC
+    22                              <1> extern DumpEflags
+    23                              <1> extern DumpRegs
+    24                              <1> extern IsDigit
+    25                              <1> extern Mvcl
+    26                              <1> extern FileOpen
+    27                              <1> extern FileClose
+    28                              <1> extern FileRead
+    29                              <1> extern FileWrite
+    30                              <1> extern ParseDecimal32
+    31                              <1> extern ParseInteger32
+    32                              <1> extern ParseDecimal64
+    33                              <1> extern ParseInteger64
+    34                              <1> extern ReadChar
+    35                              <1> extern ReadDec
+    36                              <1> extern ReadHex
+    37                              <1> extern ReadInt
+    38                              <1> extern ReadKey
+    39                              <1> extern ReadString
+    40                              <1> extern ReadStr
+    41                              <1> extern Str_compare
+    42                              <1> extern Str_copy
+    43                              <1> extern Str_length
+    44                              <1> extern StrLength
+    45                              <1> extern Str_trim
+    46                              <1> extern Str_ucase
+    47                              <1> extern WriteBin
+    48                              <1> extern WriteBinB
+    49                              <1> extern WriteChar
+    50                              <1> extern WriteDec
+    51                              <1> extern WriteHex
+    52                              <1> extern WriteHexDbl
+    53                              <1> extern WriteHexB
+    54                              <1> extern WriteInt
+    55                              <1> extern WriteString
+    56                              <1> ; ------------------------------------------
+    57                              <1> 
+    58                              <1> %endif
+     7                                  
+     8                                  global  main               ; global entry point export for ld
+     9                                  
+    10                                  section .text
+    11                                  main:
+    12 00000000 E8(00000000)            	call	Crlf		; perform line feed
+    13 00000005 48BA-                   	mov	rdx, message 	; load message address	
+    13 00000007 [0000000000000000] 
+    14 0000000F E8(00000000)            	call 	WriteString	; perform write to terminal
+    15                                  	; program suspended for write to terminal
+    16 00000014 E8(00000000)            	call 	Crlf		; perform line feed
+    17 00000019 E8(00000000)            	call	Crlf
+    18 0000001E 48BA-                   	mov 	rdx, goodbye	; load message address
+    18 00000020 [0E00000000000000] 
+    19 00000028 E8(00000000)            	call 	WriteString	; perform write to terminal
+    20                                  	; program suspended
+    21 0000002D E8(00000000)            	call 	Crlf		; perform line feed
+    22 00000032 E8(00000000)            	call 	Crlf
+    23 00000037 48BA-                   	mov 	rdx, looney	; load message address
+    23 00000039 [1D00000000000000] 
+    24 00000041 E8(00000000)            	call	WriteString	; perform write to terminal
+    25 00000046 E8(00000000)            	call 	Crlf		; perform line feed 
+    26 0000004B E8(00000000)            	call 	Crlf
+    27 00000050 B83C0000004831FF0F-         	Exit
+    27 00000059 05                 
+    28                                  
+    29                                  section .data
+    30 00000000 48656C6C6F2C20576F-     message: db   	"Hello, World!",00h   	; message and NULL-TERMINATOR
+    30 00000009 726C642100         
+    31                                  length:  equ  	$-message        	; NASM definition pseudo-instruction
+    32 0000000E 476F6F646279652057-     goodbye: db 	"Goodbye World!",00h	; goodbye world message and CRLF
+    32 00000017 6F726C642100       
+    33                                  gblen: 	 equ 	$-goodbye		; length of goodbye
+    34 0000001D 54686174277320416C-     looney:  db 	"That's All, Folks!",00h	; looney tunes farewell
+    34 00000026 6C2C20466F6C6B7321-
+    34 0000002F 00                 
+    35                                  looneylen: equ 	$-looney		; looney tunes farewell length
